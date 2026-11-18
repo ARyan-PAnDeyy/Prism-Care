@@ -1,36 +1,41 @@
 """
 AI-Powered Medical Summarization Engine
-Uses Google Gemini AI for intelligent medical history analysis and summarization
+Uses OpenRouter (100+ models) for intelligent medical history analysis and summarization
 """
 
-import google.generativeai as genai
+from openai import OpenAI
 import os
 from typing import Dict, List, Any
 from datetime import datetime
 import json
 
-# Configure Gemini API
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+# Configure OpenRouter API
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 USE_LLM = os.getenv("USE_LLM", "true").lower() == "true"
-LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.0-flash-exp")
+LLM_MODEL = os.getenv("LLM_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
 
-if GEMINI_API_KEY and USE_LLM:
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(LLM_MODEL)
+if OPENROUTER_API_KEY and USE_LLM:
+    openrouter_client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY
+    )
+    model = LLM_MODEL
 else:
+    openrouter_client = None
     model = None
-    print("⚠️  Gemini AI not configured. Using fallback summarization.")
+    print("WARNING: OpenRouter AI not configured. Using fallback summarization.")
 
 
 class MedicalSummarizer:
     """AI-powered medical history summarization"""
     
     def __init__(self):
+        self.client = openrouter_client
         self.model = model
     
     def summarize_medical_history(self, patient_data: Dict, target_audience: str = "doctor") -> Dict:
         """
-        Generate comprehensive medical summary using Gemini AI
+        Generate comprehensive medical summary using OpenRouter AI
         
         Args:
             patient_data: Complete patient medical records
@@ -39,16 +44,31 @@ class MedicalSummarizer:
         Returns:
             Structured summary with key insights
         """
-        if not self.model:
+        if not self.client:
+            print("WARNING: OpenRouter client not initialized - using fallback")
             return self._fallback_summary(patient_data)
         
         try:
-            # Prepare prompt for Gemini
+            # Prepare prompt for OpenRouter
             prompt = self._build_summary_prompt(patient_data, target_audience)
             
-            # Generate summary
-            response = self.model.generate_content(prompt)
-            summary_text = response.text
+            print(f"[AI Summary] Calling OpenRouter API with model: {self.model}")
+            print(f"[AI Summary] Prompt length: {len(prompt)} characters")
+            
+            # Generate summary using OpenRouter
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert medical AI assistant specialized in creating comprehensive, detailed medical summaries. Always provide thorough, in-depth analysis."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,  # Higher for more detailed, varied responses
+                max_tokens=3000,  # Increased for comprehensive summaries
+            )
+            summary_text = response.choices[0].message.content
+            
+            print(f"[AI Summary] SUCCESS! Generated {len(summary_text)} characters")
+            print(f"[AI Summary] First 100 chars: {summary_text[:100]}...")
             
             # Parse and structure the response
             summary = {
@@ -60,17 +80,21 @@ class MedicalSummarizer:
                 "active_medications": self._extract_active_medications(patient_data),
                 "recent_trends": self._analyze_trends(patient_data),
                 "risk_factors": self._identify_risk_factors(patient_data),
-                "recommendations": self._generate_recommendations(patient_data)
+                "recommendations": self._generate_recommendations(patient_data),
+                "ai_generated": True  # Flag to indicate AI was used
             }
             
             return summary
             
         except Exception as e:
-            print(f"❌ Gemini AI error: {str(e)}")
+            print(f"ERROR: OpenRouter AI error: {str(e)}")
+            print(f"ERROR: Full exception: {repr(e)}")
+            import traceback
+            traceback.print_exc()
             return self._fallback_summary(patient_data)
     
     def _build_summary_prompt(self, patient_data: Dict, target_audience: str = "doctor") -> str:
-        """Build detailed prompt for Gemini"""
+        """Build detailed prompt for comprehensive medical summaries"""
         
         # Extract key information
         demographics = f"{patient_data.get('name')}, {patient_data.get('age')}Y, {patient_data.get('gender')}"
@@ -89,13 +113,13 @@ class MedicalSummarizer:
         
         recent_labs = patient_data.get("lab_reports", [])[:3]  # Last 3 reports
         labs_text = "\n".join([
-            f"- {lab['test_name']} ({lab['date']})"
+            f"- {lab['test_name']} ({lab['date']}): {lab.get('result', 'N/A')}"
             for lab in recent_labs
         ])
         
         if target_audience == "patient":
-            prompt = f"""You are a helpful and empathetic medical AI assistant for a patient. Provide a simple, easy-to-understand health summary.
-            
+            prompt = f"""You are an expert medical AI assistant. Create a DETAILED, COMPREHENSIVE health summary for the patient.
+
 **Patient:** {demographics}
 
 **Health Records:**
@@ -103,16 +127,44 @@ class MedicalSummarizer:
 - **Medications:** {meds_text if meds_text else "None"}
 - **Recent Labs:** {labs_text if labs_text else "None"}
 
-**Please provide a Patient-Friendly Summary:**
-1. **Health Overview** (Simple language): "You have [Condition] which means..."
-2. **Your Medications**: Explain simply what they are for.
-3. **Recent Results**: "Your recent tests show..." (Good/Bad).
-4. **What to Watch For**: Simple warning signs.
-5. **Lifestyle Tips**: Diet/Exercise advice.
+**IMPORTANT:** Provide a DETAILED, COMPREHENSIVE summary with AT LEAST 300 words. Include:
 
-**Tone:** Empathetic, simple (5th-grade reading level), encouraging. No complex jargon without explanation."""
+1. **Health Overview** (3-4 paragraphs):
+   - Explain each condition in simple terms
+   - How conditions relate to each other
+   - Current health status and prognosis
+
+2. **Your Medications** (Detailed):
+   - What each medication does
+   - Why it's important
+   - How it helps your condition
+   - Common side effects to watch for
+
+3. **Recent Test Results** (Comprehensive):
+   - What each test measures
+   - What your results mean
+   - Are they improving or concerning?
+   - Comparison with normal ranges
+
+4. **Warning Signs to Watch For**:
+   - Specific symptoms that need immediate attention
+   - When to call your doctor
+   - Emergency situations
+
+5. **Lifestyle Recommendations**:
+   - Specific diet suggestions
+   - Exercise guidelines
+   - Sleep and stress management
+   - Daily habits to improve health
+
+6. **Next Steps**:
+   - Upcoming tests or appointments
+   - Goals for improvement
+   - Timeline for reassessment
+
+**Tone:** Empathetic, encouraging, but THOROUGH. Use simple language but don't skip important details. Aim for 400-500 words minimum."""
         else:
-            prompt = f"""You are a medical AI assistant. Provide a comprehensive yet concise medical summary for this patient.
+            prompt = f"""You are an expert medical AI assistant. Provide a COMPREHENSIVE, DETAILED clinical summary for healthcare providers.
 
 **Patient:** {demographics}
 
@@ -125,15 +177,51 @@ class MedicalSummarizer:
 **Recent Lab Tests:**
 {labs_text if labs_text else "None"}
 
-**Please provide:**
-1. **Medical Summary** (2-3 sentences): Overall health status
-2. **Key Health Concerns**: Most important conditions to monitor
-3. **Medication Review**: Any potential issues or interactions
-4. **Trend Analysis**: Are conditions improving, stable, or worsening?
-5. **Risk Factors**: What should be monitored closely?
-6. **Recommendations**: Suggested tests, lifestyle changes, or follow-ups
+**CRITICAL:** Generate a DETAILED clinical summary with AT LEAST 400 words. Include:
 
-**Tone:** Professional, clear, and actionable for healthcare providers."""
+1. **Executive Summary** (2-3 paragraphs):
+   - Overall health status and complexity
+   - Primary vs secondary conditions
+   - Current stability and trajectory
+
+2. **Detailed Condition Analysis**:
+   - Each diagnosis with severity assessment
+   - Pathophysiology and progression
+   - Comorbidity interactions
+   - Evidence-based management status
+
+3. **Medication Review** (Comprehensive):
+   - Therapeutic appropriateness
+   - Drug-drug interactions
+   - Drug-disease interactions
+   - Adherence considerations
+   - Potential optimization opportunities
+
+4. **Laboratory Trend Analysis**:
+   - Key biomarker trends over time
+   - Abnormal values and clinical significance
+   - Response to therapy
+   - Recommended monitoring frequency
+
+5. **Risk Stratification**:
+   - Cardiovascular risk
+   - Metabolic risk
+   - Complication risk
+   - Hospitalization risk factors
+
+6. **Clinical Recommendations** (Specific):
+   - Diagnostic workup needed
+   - Treatment modifications
+   - Specialist referrals
+   - Preventive measures
+   - Follow-up timeline
+
+7. **Quality Metrics**:
+   - Guideline adherence
+   - Care gaps
+   - Preventive health status
+
+**Tone:** Professional, evidence-based, actionable. Minimum 500 words. Be thorough and specific."""
         
         return prompt
     
@@ -178,8 +266,8 @@ class MedicalSummarizer:
             if len(hba1c_labs) >= 2:
                 # Sort by date
                 sorted_labs = sorted(hba1c_labs, key=lambda x: x.get("date", ""))
-                latest = sorted_labs[-1]["results"].get("hba1c", {}).get("value", 0)
-                previous = sorted_labs[-2]["results"].get("hba1c", {}).get("value", 0)
+                latest = sorted_labs[-1].get("results", {}).get("hba1c", {}).get("value", 0)
+                previous = sorted_labs[-2].get("results", {}).get("hba1c", {}).get("value", 0)
                 
                 if latest > previous:
                     trends.append(f"HbA1c trending upward ({previous}% → {latest}%)")
@@ -192,7 +280,7 @@ class MedicalSummarizer:
         if "Lipid Profile" in labs_by_test:
             lipid_labs = labs_by_test["Lipid Profile"]
             if len(lipid_labs) >= 1:
-                latest_lipid = lipid_labs[-1]["results"]
+                latest_lipid = lipid_labs[-1].get("results", {})
                 ldl = latest_lipid.get("ldl", {})
                 if ldl.get("status") == "high":
                     trends.append(f"LDL cholesterol elevated at {ldl.get('value')} mg/dL")

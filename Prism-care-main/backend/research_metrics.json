@@ -1,0 +1,44 @@
+{
+  "timestamp": "2026-02-24T23:10:21.385804",
+  "metrics": {
+    "drug": {
+      "accuracy": 0.75,
+      "precision": 1.0,
+      "recall": 0.5714,
+      "f1_score": 0.7273,
+      "risk_level_accuracy": 0.75,
+      "avg_latency_ms": 6985.8,
+      "TP": 4,
+      "TN": 5,
+      "FP": 0,
+      "FN": 3
+    },
+    "xai": {
+      "avg_completeness_score": 1.0,
+      "llm_usage_rate": 1.0,
+      "avg_rag_rules_retrieved": 3.0,
+      "avg_sources_cited": 3.0,
+      "avg_explanation_latency_ms": 9685.3,
+      "error_count": 0
+    },
+    "chat": {
+      "avg_chat_latency_ms": 8878.7,
+      "avg_response_length_chars": 178.4,
+      "rich_response_rate": 0.4,
+      "errors": 0
+    },
+    "sys": {
+      "total_endpoints": 6,
+      "passing_endpoints": 5,
+      "system_uptime_rate": 0.8333,
+      "avg_endpoint_latency_ms": 7396.5
+    },
+    "rag": {
+      "mean_precision_at_3": 1.0,
+      "mean_recall_at_3": 0.82,
+      "mean_mrr": 1.0,
+      "avg_retrieval_latency_ms": 390.94,
+      "knowledge_base_rules": 50
+    }
+  }
+}

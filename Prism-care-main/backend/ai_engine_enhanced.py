@@ -849,68 +849,109 @@ def get_treatment_suggestions(diagnosis: str, current_medications: List[str]) ->
 
 
 
+def _local_chat_fallback(user_query: str, patient_context: Dict) -> str:
+    """
+    Keyword-based local fallback chat when RAG/Gemini is unavailable.
+    """
+    age = patient_context.get('age', 'Unknown')
+    gender = patient_context.get('gender', 'Unknown')
+    allergies = patient_context.get('allergies', [])
+    conditions = patient_context.get('conditions', [])
+    medications = patient_context.get('medications', [])
+    query_lower = user_query.lower()
+
+    if any(word in query_lower for word in ['hello', 'hi', 'hey', 'start']):
+        return (
+            f"Hello! I'm your PrismCare AI medical assistant.\n\n"
+            f"**Your Health Profile:**\n"
+            f"- Age: {age} years, {gender}\n"
+            f"- Known Allergies: {', '.join(allergies) if allergies else 'None recorded'}\n"
+            f"- Chronic Conditions: {', '.join(conditions) if conditions else 'None recorded'}\n"
+            f"- Current Medications: {', '.join(medications) if medications else 'None recorded'}\n\n"
+            f"How can I help you today?"
+        )
+    if any(word in query_lower for word in ['medication', 'medicine', 'drug', 'pill']):
+        if medications:
+            meds_list = '\n'.join([f"- **{m}**: Take as prescribed." for m in medications[:5]])
+            return (
+                f"**Your Current Medications:**\n{meds_list}\n\n"
+                f"⚠️ Never stop medications without consulting your doctor.\n"
+                f"⚠️ Known allergies: {', '.join(allergies) if allergies else 'None'}"
+            )
+        return "No medications recorded in your profile. Please consult your healthcare provider."
+    if any(word in query_lower for word in ['condition', 'disease', 'diagnosis']):
+        if conditions:
+            cond_info = '\n'.join([f"- **{c}**" for c in conditions])
+            return f"**Your Health Conditions:**\n{cond_info}\n\nRegular check-ups and medication adherence are key."
+        return "No chronic conditions recorded. Keep up a healthy lifestyle!"
+    if 'allerg' in query_lower:
+        if allergies:
+            return f"**Known Allergies:** {', '.join(allergies)}\n\n⚠️ Always inform healthcare providers of these allergies."
+        return "No allergies recorded in your profile."
+    if any(word in query_lower for word in ['lab', 'test', 'result', 'report']):
+        return (
+            "**Understanding Your Lab Results:**\n\n"
+            "Lab tests help monitor your health. Upload your latest report for AI analysis, "
+            "and I'll highlight abnormal values and provide personalized recommendations."
+        )
+    if any(word in query_lower for word in ['diet', 'food', 'eat', 'nutrition']):
+        diet = "a balanced diet with fruits, vegetables, whole grains, and lean proteins"
+        if any('diabetes' in c.lower() for c in conditions):
+            diet = "a low-sugar, high-fiber diet with whole grains and lean proteins"
+        elif any('hypertension' in c.lower() for c in conditions):
+            diet = "a low-sodium DASH diet, rich in potassium"
+        return f"Based on your profile, I recommend {diet}.\n\n💧 Stay hydrated and limit processed foods."
+    if any(word in query_lower for word in ['emergency', 'urgent', 'pain']):
+        return (
+            "**⚠️ EMERGENCY WARNING SIGNS — Call 911 if you experience:**\n"
+            "- Chest pain or pressure\n- Difficulty breathing\n- Sudden severe headache\n"
+            "- Sudden weakness or numbness\n- Uncontrolled bleeding\n- Loss of consciousness"
+        )
+    return (
+        "I can help with medications, conditions, lab results, diet, exercise, and drug interactions.\n\n"
+        f"**Your Summary:** {len(conditions)} condition(s), {len(medications)} medication(s), "
+        f"{len(allergies)} known allerg{'y' if len(allergies) == 1 else 'ies'}.\n\n"
+        "Please ask me something specific!"
+    )
+
+
 def chat_with_context(history: List[Dict], user_query: str, patient_context: Dict) -> str:
     """
-    Chat with context awareness (Patient History + Allergies)
-    
+    Chat with context awareness using RAG + Gemini LLM.
+    Retrieves relevant medical knowledge from ChromaDB and generates
+    a patient-specific response via Gemini. Falls back to keyword-based
+    response if LLM is unavailable.
+
     Args:
-        history: List of previous chat messages
+        history: List of previous chat messages [{"role": "user"|"assistant", "content": "..."}]
         user_query: Current user question
-        patient_context: Dictionary containing patient allergies, conditions, medications
-        
+        patient_context: Dict with patient allergies, conditions, medications
+
     Returns:
         AI response string
     """
-    
-    # Configure Gemini if not already configured (this might be redundant if done in main app but good for safety)
-    import os
-    import google.generativeai as genai
-    
-    api_key = os.getenv('GEMINI_API_KEY')
-    if api_key:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
-    else:
-        return "I'm sorry, I cannot process your request at the moment. Please check system configuration."
+    print(f"\n{'='*70}")
+    print(f"[CHAT] Processing via RAG + Gemini pipeline")
+    print(f"{'='*70}\n")
 
-    # Construct system prompt with context
-    system_prompt = f"""You are PrismCare's advanced medical AI assistant.
-    
-    **Patient Context:**
-    - Age: {patient_context.get('age', 'Unknown')}
-    - Gender: {patient_context.get('gender', 'Unknown')}
-    - Known Allergies: {', '.join(patient_context.get('allergies', [])) if patient_context.get('allergies') else 'None known'}
-    - Chronic Conditions: {', '.join(patient_context.get('conditions', [])) if patient_context.get('conditions') else 'None known'}
-    - Current Medications: {', '.join(patient_context.get('medications', [])) if patient_context.get('medications') else 'None known'}
-    
-    **Your Role:**
-    - Answer medical questions based on the user's context.
-    - If the user asks about a medication, CHECK AGAINST THEIR ALLERGIES AND CONDITIONS.
-    - If a medication is risky, WARN THEM BOLDLY.
-    - If the user asks for diagnosis, provide general information but always disclaim that you are an AI and they should see a doctor.
-    - Keep answers concise, empathetic, and easy to understand.
-    - Use Markdown formatting for readability.
-    
-    **Tone:** Professional, caring, and cautious.
-    """
-    
-    # Build chat history for Gemini
-    # We will simply prepend the system prompt to the latest query for this stateless call
-    
-    full_prompt = f"{system_prompt}\n\n"
-    
-    for msg in history:
-        role = "User" if msg.get("sender") == "user" else "Assistant"
-        full_prompt += f"{role}: {msg.get('text')}\n"
-    
-    full_prompt += f"User: {user_query}\nAssistant:"
-    
     try:
-        response = model.generate_content(full_prompt)
-        return response.text
+        from xai_rag_engine import generate_rag_chat_response
+        response = generate_rag_chat_response(
+            user_query=user_query,
+            patient_context=patient_context,
+            history=history
+        )
+        print(f"[CHAT] RAG response generated ({len(response)} chars)")
+        print(f"{'='*70}\n")
+        return response
     except Exception as e:
-        print(f"Error in chat generation: {e}")
-        return "I apologize, but I'm having trouble processing your request right now. Please try again later."
+        print(f"[CHAT] RAG failed ({e}), using local fallback")
+    
+    # ── Fallback: keyword-based local responses ──────────────────
+    response = _local_chat_fallback(user_query, patient_context)
+    print(f"[CHAT] Fallback response ({len(response)} chars)")
+    print(f"{'='*70}\n")
+    return response
 
 
 # Initialize on import

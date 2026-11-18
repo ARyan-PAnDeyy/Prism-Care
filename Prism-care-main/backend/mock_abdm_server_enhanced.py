@@ -5,6 +5,14 @@ Includes: Lab Reports, Diagnoses, Treatment History, Visit Summaries
 Port: 8080
 """
 
+import sys
+# Ensure emoji in log output don't crash on Windows consoles (cp1252)
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 import random
@@ -137,6 +145,46 @@ PATIENTS_DB = {
                 "results": {
                     "inr": {"value": 2.3, "unit": "", "normal_range": "2.0-3.0", "status": "therapeutic", "interpretation": "Warfarin dose appropriate"}
                 }
+            },
+            # HISTORICAL DATA ADDED HERE
+            {
+                "report_id": "LABH001",
+                "test_name": "HbA1c (Glycated Hemoglobin)",
+                "date": "2023-10-15",
+                "ordered_by": "Dr. Verma",
+                "results": {
+                    "hba1c": {"value": 7.2, "unit": "%", "normal_range": "<5.7", "status": "high", "interpretation": "Diabetes slightly uncontrolled"}
+                }
+            },
+            {
+                "report_id": "LABH002",
+                "test_name": "HbA1c (Glycated Hemoglobin)",
+                "date": "2023-06-10",
+                "ordered_by": "Dr. Verma",
+                "results": {
+                    "hba1c": {"value": 7.5, "unit": "%", "normal_range": "<5.7", "status": "high", "interpretation": "Diabetes uncontrolled"}
+                }
+            },
+            {
+                "report_id": "LABH003",
+                "test_name": "INR (International Normalized Ratio)",
+                "date": "2024-01-05",
+                "ordered_by": "Dr. Sharma",
+                "results": {
+                    "inr": {"value": 1.8, "unit": "", "normal_range": "2.0-3.0", "status": "low", "interpretation": "Sub-therapeutic, dose adjustment needed"}
+                }
+            },
+            {
+                "report_id": "LABH004",
+                "test_name": "Lipid Profile",
+                "date": "2023-08-20",
+                "ordered_by": "Dr. Sharma",
+                "results": {
+                    "total_cholesterol": {"value": 230, "unit": "mg/dL", "normal_range": "<200", "status": "high"},
+                    "ldl": {"value": 155, "unit": "mg/dL", "normal_range": "<100", "status": "high"},
+                    "hdl": {"value": 42, "unit": "mg/dL", "normal_range": ">40", "status": "normal"},
+                    "triglycerides": {"value": 165, "unit": "mg/dL", "normal_range": "<150", "status": "borderline"}
+                }
             }
         ],
         
@@ -157,6 +205,14 @@ PATIENTS_DB = {
                 "facility": "Wellness Center",
                 "outcome": "Patient educated on diet and exercise",
                 "notes": "Follow-up in 3 months"
+            },
+            {
+                "procedure": "Echocardiogram",
+                "date": "2023-05-20",
+                "performed_by": "Dr. Sharma",
+                "facility": "City Heart Clinic",
+                "outcome": "Mild left atrial enlargement, normal LV function",
+                "notes": "LVEF 60%"
             }
         ],
         
@@ -193,6 +249,38 @@ PATIENTS_DB = {
                 "assessment": "Type 2 DM adequately controlled. HbA1c at 6.8%. No complications noted.",
                 "plan": "Continue Metformin 500mg BD. Dietary counseling. Increase physical activity. Repeat HbA1c in 3 months.",
                 "next_visit": "2024-04-28"
+            },
+            # HISTORICAL VISITS ADDED HERE
+            {
+                "visit_id": "V003",
+                "date": "2023-10-15",
+                "doctor": "Dr. Verma (Endocrinologist)",
+                "facility": "Diabetes Care Center",
+                "chief_complaint": "Follow-up for diabetes, feeling fatigued",
+                "vitals": {
+                    "bp": "135/85 mmHg",
+                    "pulse": "80 bpm",
+                    "weight": "80 kg",
+                    "bmi": "27.0"
+                },
+                "assessment": "HbA1c elevated at 7.2%. Weight increased by 2kg. Dietary non-compliance suspected.",
+                "plan": "Reinforce lifestyle changes. Retain current medication dose. Review in 3 months.",
+                "next_visit": "2024-01-15"
+            },
+            {
+                "visit_id": "V004",
+                "date": "2023-08-20",
+                "doctor": "Dr. Sharma (Cardiologist)",
+                "facility": "City Heart Clinic",
+                "chief_complaint": "Palpitations occasionally",
+                "vitals": {
+                    "bp": "140/90 mmHg",
+                    "pulse": "88 bpm (irregular)",
+                    "weight": "79 kg"
+                },
+                "assessment": "BP elevated. Lipid profile shows high LDL. HR controlled but slightly fast.",
+                "plan": "Added Amlodipine 5mg. Dietary advice for cholesterol. Continue Warfarin.",
+                "next_visit": "2023-11-20"
             }
         ]
     },

@@ -4,6 +4,14 @@ Integrates all new components: Enhanced ABDM, Preprocessing, AI Summarization, E
 Port: 5000
 """
 
+import sys
+# Ensure emoji in log output don't crash on Windows consoles (cp1252)
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
@@ -19,6 +27,7 @@ load_dotenv()
 from data_preprocessor import preprocess_patient_data
 from ai_summarizer import generate_medical_summary
 from ai_engine_enhanced import analyze_prescription, get_test_recommendations, get_treatment_suggestions, chat_with_context
+from xai_rag_engine import explain_drug_interaction
 from lab_analyzer import analyze_lab_report, parse_lab_report_text
 import tempfile
 
@@ -114,7 +123,6 @@ def get_patient_summary(abha_id):
         labs_response = requests.get(f"{ABDM_SERVER_URL}/fhir/DiagnosticReport", params={"patient": abha_id})
         
         # Build patient data structure for AI summarization
-        # Note: This is a simplified version - in production, you'd fetch from the actual enhanced server
         patient_data = {
             "id": abha_id,
             "name": response.json().get("name", [{}])[0].get("text", ""),
@@ -124,6 +132,40 @@ def get_patient_summary(abha_id):
             "medications": [],
             "lab_reports": []
         }
+
+        # Parse Diagnoses
+        if diagnoses_response.status_code == 200:
+            for entry in diagnoses_response.json().get("entry", []):
+                res = entry.get("resource", {})
+                patient_data["diagnoses"].append({
+                    "condition": res.get("code", {}).get("text", "Unknown"),
+                    "diagnosed_date": res.get("onsetDateTime", "Unknown"),
+                    "status": res.get("clinicalStatus", {}).get("coding", [{}])[0].get("code", "unknown"),
+                    "severity": res.get("severity", {}).get("coding", [{}])[0].get("display", "unknown")
+                })
+
+        # Parse Medications
+        if meds_response.status_code == 200:
+            for entry in meds_response.json().get("entry", []):
+                res = entry.get("resource", {})
+                dosage_instr = res.get("dosageInstruction", [{}])[0]
+                patient_data["medications"].append({
+                    "medicine": res.get("medicationCodeableConcept", {}).get("text", "Unknown"),
+                    "dosage": dosage_instr.get("text", ""),
+                    "frequency": dosage_instr.get("timing", {}).get("repeat", {}).get("frequency", ""),
+                    "status": res.get("status", "unknown"),
+                    "purpose": res.get("reasonCode", [{}])[0].get("text", "")
+                })
+
+        # Parse Labs
+        if labs_response.status_code == 200:
+            for entry in labs_response.json().get("entry", []):
+                res = entry.get("resource", {})
+                patient_data["lab_reports"].append({
+                    "test_name": res.get("code", {}).get("text", "Unknown"),
+                    "date": res.get("effectiveDateTime", ""),
+                    "result": res.get("result", {})
+                })
         
         # For demo, return a structured summary
         target = request.args.get('target', 'doctor')
@@ -375,6 +417,114 @@ def upload_lab_report(abha_id):
         
         return jsonify(analysis), 200
         
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/xai/explain', methods=['POST'])
+def xai_explain():
+    """
+    RAG-powered XAI Explanation Endpoint
+    Generates a detailed, Gemini-powered explanation for a drug safety decision
+    with ChromaDB-retrieved evidence.
+
+    Request body:
+        { "abha_id": "ABHA001", "medicine": "Aspirin", "view_mode": "doctor" }
+
+    Response:
+        {
+          "status": "Risky",
+          "risk_level": "Critical",
+          "generated_explanation": "...",
+          "mechanism": "...",
+          "recommendation": "...",
+          "rag_retrieved_rules": [...],
+          "sources": [...],
+          "llm_used": true,
+          "model": "gemini-2.0-flash-exp"
+        }
+    """
+    try:
+        data = request.json
+        abha_id = data.get('abha_id')
+        medicine = data.get('medicine')
+        view_mode = data.get('view_mode', 'doctor')
+
+        if not abha_id or not medicine:
+            return jsonify({"error": "Missing required fields: abha_id and medicine"}), 400
+
+        # 1. Fetch patient context from ABDM
+        current_medications = []
+        patient_context = {"allergies": [], "conditions": [], "age": None, "gender": None}
+
+        try:
+            # Patient demographics
+            pat_resp = requests.get(f"{ABDM_SERVER_URL}/fhir/Patient", params={"identifier": abha_id})
+            if pat_resp.status_code == 200:
+                pat_data = pat_resp.json()
+                patient_context["age"] = pat_data.get("age")
+                patient_context["gender"] = pat_data.get("gender", "").capitalize()
+
+            # Active medications
+            med_resp = requests.get(f"{ABDM_SERVER_URL}/fhir/MedicationRequest", params={"patient": abha_id})
+            if med_resp.status_code == 200:
+                for entry in med_resp.json().get("entry", []):
+                    res = entry.get("resource", {})
+                    if res.get("status") == "active":
+                        med_name = res.get("medicationCodeableConcept", {}).get("text", "")
+                        if med_name:
+                            current_medications.append(med_name)
+
+            # Conditions
+            cond_resp = requests.get(f"{ABDM_SERVER_URL}/fhir/Condition", params={"patient": abha_id})
+            if cond_resp.status_code == 200:
+                for entry in cond_resp.json().get("entry", []):
+                    cond_name = entry.get("resource", {}).get("code", {}).get("text", "")
+                    if cond_name:
+                        patient_context["conditions"].append(cond_name)
+
+            # Simulated allergies
+            if abha_id == "ABHA003":
+                patient_context["allergies"].append("Ibuprofen")
+            if "Asthma" in patient_context["conditions"]:
+                patient_context["allergies"].append("Aspirin")
+
+        except requests.exceptions.ConnectionError:
+            # Proceed without context if ABDM is down
+            pass
+
+        # 2. Run base drug safety analysis
+        interaction_data = analyze_prescription(current_medications, medicine, patient_context)
+
+        # 3. Generate XAI explanation via RAG + Gemini
+        xai_result = explain_drug_interaction(
+            medication_history=current_medications,
+            new_drug=medicine,
+            interaction_data=interaction_data,
+            patient_context=patient_context,
+            view_mode=view_mode
+        )
+
+        # 4. Combine and return
+        return jsonify({
+            "patient_id": abha_id,
+            "medicine_checked": medicine,
+            "view_mode": view_mode,
+            "status": interaction_data.get("status"),
+            "risk_level": interaction_data.get("risk_level", "Safe"),
+            "confidence": interaction_data.get("confidence", 0.90),
+            "mechanism": interaction_data.get("mechanism", "N/A"),
+            "recommendation": interaction_data.get("recommendation", "Consult healthcare provider"),
+            "patient_explanation": interaction_data.get("patient_explanation", ""),
+            "doctor_explanation": interaction_data.get("doctor_explanation", ""),
+            # XAI-specific fields
+            "generated_explanation": xai_result["generated_explanation"],
+            "rag_retrieved_rules": xai_result["rag_retrieved_rules"],
+            "sources": xai_result["sources"],
+            "llm_used": xai_result["llm_used"],
+            "model": xai_result["model"],
+        }), 200
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
