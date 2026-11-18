@@ -107,7 +107,7 @@ export default function AdminDashboard() {
                                             <td className="px-4 py-3 text-sm">{override.patient_id}</td>
                                             <td className="px-4 py-3 text-sm font-medium">{override.drug}</td>
                                             <td className="px-4 py-3 text-sm">
-                                                <span className={`px-2 py-1 rounded-full text-xs ${override.risk_level === 'High' ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning'
+                                                <span className={`px-2 py-1 rounded-full text-xs ${['High', 'Critical'].includes(override.risk_level) ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning'
                                                     }`}>
                                                     {override.risk_level}
                                                 </span>

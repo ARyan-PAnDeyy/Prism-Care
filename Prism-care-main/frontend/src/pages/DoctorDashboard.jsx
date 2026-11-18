@@ -3,6 +3,7 @@ import { Search, FileText, AlertCircle, MessageSquare, Send, Activity, Clock, Fi
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import Button from '../components/Button';
+import FormattedText from '../components/FormattedText';
 import Card from '../components/Card';
 import Modal from '../components/Modal';
 import XAIExplanationPanel from '../components/XAIExplanationPanel';
@@ -94,7 +95,7 @@ export default function DoctorDashboard() {
             await axios.post('/api/admin/override', {
                 doctor_id: 'DR001',
                 doctor_name: 'Dr. Smith',
-                patient_id: patient.abha_id,
+                patient_id: patient.id,
                 drug: medicine,
                 risk_level: result.risk_level,
                 reason: overrideReason
@@ -292,10 +293,14 @@ export default function DoctorDashboard() {
                                                         <div className="space-y-3">
                                                             {treatmentSuggestions.map((suggestion, idx) => (
                                                                 <div key={idx} className="p-4 bg-green-50 border border-green-100 rounded-lg">
-                                                                    <h5 className="font-semibold text-green-900">{suggestion.category}</h5>
-                                                                    <p className="text-sm text-green-700 mt-1">{suggestion.recommendation}</p>
-                                                                    {suggestion.evidence && (
-                                                                        <p className="text-xs text-green-600 mt-2 italic">Evidence: {suggestion.evidence}</p>
+                                                                    <h5 className="font-semibold text-green-900">{suggestion.treatment || suggestion.category}</h5>
+                                                                    <p className="text-sm text-green-700 mt-1">{suggestion.rationale || suggestion.recommendation}</p>
+                                                                    {(suggestion.source || suggestion.evidence_level || suggestion.evidence) && (
+                                                                        <p className="text-xs text-green-600 mt-2 italic">
+                                                                            {suggestion.evidence_level ? `Evidence level ${suggestion.evidence_level}` : ''}
+                                                                            {suggestion.evidence_level && suggestion.source ? ' · ' : ''}
+                                                                            {suggestion.source || suggestion.evidence}
+                                                                        </p>
                                                                     )}
                                                                 </div>
                                                             ))}
@@ -497,7 +502,7 @@ export default function DoctorDashboard() {
                                                 ? 'bg-primary text-white rounded-br-none shadow-md'
                                                 : 'bg-white text-slate-700 border border-slate-200 rounded-bl-none shadow-sm'
                                                 }`}>
-                                                {msg.content}
+                                                <FormattedText text={msg.content} className="space-y-0.5" />
                                             </div>
                                         </div>
                                     ))}

@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import LoadingSpinner from '../components/LoadingSpinner';
+import FormattedText from '../components/FormattedText';
 
 export default function PatientDashboard() {
     const [abhaId, setAbhaId] = useState('');
@@ -502,7 +503,7 @@ export default function PatientDashboard() {
                                                 ? 'bg-indigo-600 text-white rounded-tr-none'
                                                 : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-tl-none'
                                             }`}>
-                                            <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                                            <FormattedText text={msg.text} className="text-sm space-y-0.5" />
                                         </div>
                                     </div>
                                 ))}

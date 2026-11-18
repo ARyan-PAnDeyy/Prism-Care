@@ -1,223 +1,316 @@
-# PrismCare - AI Medical Validator
+<div align="center">
 
-**Multi-View Transparency in Digital Health**
+# 💊 PrismCare
 
-A comprehensive healthcare AI platform for drug interaction analysis with tailored views for patients, doctors, and administrators.
+### AI Medical Validator: Multi-View Transparency in Digital Health
 
-This is the rough sketch of project and still under development....contributors and interested parties are invited to contribute in it.
+Before a new medicine is taken or prescribed, PrismCare checks it against the patient's full medical history and explains the risk in language that fits each reader: plain English for patients, clinical detail for doctors, and audit numbers for administrators.
+
+![Python](https://img.shields.io/badge/Python-3.9+-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.x-000000?logo=flask&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?logo=tailwindcss&logoColor=white)
+![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector_DB-FF6F00)
+![Gemini](https://img.shields.io/badge/Google-Gemini-4285F4?logo=google&logoColor=white)
+
+<img src="docs/screenshots/landing.png" alt="PrismCare landing page" width="900">
+
+</div>
 
 ---
 
-## 🚀 Quick Start
+## 📑 Table of Contents
+
+- [Why PrismCare?](#-why-prismcare)
+- [Screenshots](#-screenshots)
+- [Features](#-features)
+- [Architecture](#%EF%B8%8F-architecture)
+- [Getting Started](#-getting-started)
+- [Try It Out](#-try-it-out)
+- [API Reference](#-api-reference)
+- [Project Structure](#-project-structure)
+- [Tech Stack](#-tech-stack)
+- [License](#license)
+
+---
+
+## 🤔 Why PrismCare?
+
+Drug interactions are a leading cause of preventable harm, and the same warning means different things to different people. A patient needs to know *"this could make you bleed more, talk to your doctor"*. A doctor needs the mechanism, the evidence level and the guideline source. An administrator needs to know how often warnings fire and how often doctors override them.
+
+PrismCare gives each of them their own view of the same AI decision. It pulls the patient's records from an ABDM-style (Ayushman Bharat Digital Mission) FHIR server, so the check uses their real conditions, allergies and current medicines rather than the new drug alone.
+
+---
+
+## 📸 Screenshots
+
+### 🧑 Patient view
+
+| Health summary + instant safety check | Medical records |
+|:---:|:---:|
+| <img src="docs/screenshots/patient-overview.png" alt="Patient overview with Aspirin safety warning" width="440"> | <img src="docs/screenshots/patient-records.png" alt="Patient medical records" width="440"> |
+| Checking **Aspirin** for a patient on **Warfarin** gives a plain-language bleeding-risk warning. | Active medications and diagnosed conditions from the ABDM record. |
+
+<p align="center">
+  <img src="docs/screenshots/patient-ai-chat.png" alt="Patient AI assistant chat" width="800"><br>
+  <em>Context-aware AI assistant that already knows the patient's history</em>
+</p>
+
+### 🩺 Doctor view
+
+<p align="center">
+  <img src="docs/screenshots/doctor-analysis.png" alt="Doctor dashboard with XAI safety analysis" width="900"><br>
+  <em>Explainable AI (XAI) safety analysis: risk level, confidence, clinical explanation, mechanism, evidence sources, and an override option that requires a written reason</em>
+</p>
+
+<details>
+<summary><b>More: full doctor dashboard with AI-recommended tests</b></summary>
+<br>
+<p align="center">
+  <img src="docs/screenshots/doctor-dashboard.png" alt="Doctor dashboard with recommended tests" width="900">
+</p>
+</details>
+
+### 🛡️ Admin view
+
+<p align="center">
+  <img src="docs/screenshots/admin-dashboard.png" alt="Admin dashboard" width="900"><br>
+  <em>Validation statistics, risk-detection rate and a full audit log of doctor overrides</em>
+</p>
+
+---
+
+## ✨ Features
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### 🧑 For Patients
+- Login with an ABHA ID
+- AI health summary of conditions and medicines
+- One-box medicine safety check
+- Jargon-free explanations
+- Lab report upload and AI analysis
+- AI assistant chat
+
+</td>
+<td width="33%" valign="top">
+
+### 🩺 For Doctors
+- Patient lookup with full history and labs
+- Prescribe and analyze before prescribing
+- XAI panel with risk gauge, confidence, mechanism and sources
+- AI-recommended tests and evidence-graded treatment suggestions
+- Clinical AI assistant
+- Override with a written justification
+
+</td>
+<td width="33%" valign="top">
+
+### 🛡️ For Admins
+- Total validations and risk-detection rate
+- Override rate tracking
+- Audit log: who overrode what, for whom, and why
+- Server uptime
+
+</td>
+</tr>
+</table>
+
+### 🧠 Under the hood
+
+- **50 curated drug-interaction rules** (11 Critical, 20 High, 19 Moderate) with mechanisms and guideline sources, stored in **ChromaDB** for semantic retrieval
+- **Context-aware checks**: interactions are checked against current medicines, **allergies** and **existing conditions**
+- **XAI-RAG engine**: retrieves the matching rules and, when a Gemini key is set, generates the explanation with **Google Gemini**. Without a key it falls back to rule-based explanations, so the app still works offline.
+- **FHIR-style mock ABDM server** with 5 realistic patients, including lab reports, diagnoses, procedures and visits
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart LR
+    U["👤 Patient / Doctor / Admin<br/>React + Vite :5173"] -->|REST| API["⚙️ PrismCare API<br/>Flask :5000"]
+    API -->|FHIR requests| ABDM["🏥 Mock ABDM Server<br/>Flask :8080"]
+    API --> ENG["🧠 AI Engine<br/>50 interaction rules"]
+    ENG <--> VDB[("ChromaDB<br/>vector store")]
+    API --> XAI["🔍 XAI-RAG Engine"]
+    XAI -.optional.-> LLM["✨ Google Gemini"]
+    API --> SUM["📝 Summarizer +<br/>Lab Analyzer"]
+```
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
-- Python 3.9+ (for backend)
-- Node.js 18+ (for frontend)
-- npm or yarn
 
-### Backend Setup
+- **Python** 3.9 or newer
+- **Node.js** 18 or newer
+
+### 1. Clone
 
 ```bash
-# Navigate to backend directory
-cd backend
+git clone https://github.com/ARyan-PAnDeyy/Prism-Care.git
+cd Prism-Care/Prism-care-main
+```
 
-# Install Python dependencies
+### 2. Backend
+
+```bash
+cd backend
 pip install -r requirements.txt
 
-# Start Mock ABDM Server (Terminal 1)
-python mock_abdm_server.py
-# Server runs on http://localhost:8080
-
-# Start Main API Server (Terminal 2)
-python app.py
-# Server runs on http://localhost:5000
+# Optional: enables LLM-powered explanations and summaries
+cp .env.example .env     # then add your API keys
 ```
 
-### Frontend Setup
+| Variable | Required | Purpose |
+|---|---|---|
+| `GEMINI_API_KEY` | Optional | XAI explanations and lab analysis via Gemini ([get a free key](https://aistudio.google.com/app/apikey)) |
+| `OPENROUTER_API_KEY` | Optional | LLM-written patient summaries |
+| `USE_LLM` | Optional | `true` / `false` |
+
+> Without any keys the app runs fully on its rule-based engine.
+
+### 3. Start the servers (3 terminals)
 
 ```bash
-# Navigate to frontend directory
+# Terminal 1: Mock ABDM health-records server  →  http://localhost:8080
+cd backend
+python mock_abdm_server_enhanced.py
+
+# Terminal 2: Main API server  →  http://localhost:5000
+cd backend
+python app_enhanced.py
+
+# Terminal 3: Frontend  →  http://localhost:5173
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
-# App runs on http://localhost:5173
 ```
+
+Then open **http://localhost:5173** 🎉
 
 ---
 
-## 📋 Testing the Application
+## 🧪 Try It Out
 
-### Sample ABHA IDs
-- **ABHA001**: Rajesh Kumar (58M) - on Warfarin + Metformin
-- **ABHA002**: Priya Sharma (42F) - on Lisinopril + Atorvastatin
-- **ABHA003**: Mohammed Ali (35M) - previous Ibuprofen use
+### Sample patients (ABHA IDs)
 
-### Test Scenarios
+| ABHA ID | Patient | Active medicines | Conditions |
+|---|---|---|---|
+| `ABHA001` | Rajesh Kumar, 58 M | Warfarin, Metformin, Amlodipine | Type 2 Diabetes, Atrial Fibrillation, Hypertension |
+| `ABHA002` | Priya Sharma, 42 F | Lisinopril, Atorvastatin | Hypertension, Hyperlipidemia, Vitamin D Deficiency |
+| `ABHA003` | Mohammed Ali, 35 M | none | Chronic Lower Back Pain |
+| `ABHA004` | Sunita Devi, 65 F | Glimepiride, Levothyroxine, Glucosamine | Osteoarthritis, Type 2 Diabetes, Hypothyroidism |
+| `ABHA005` | Amit Patel, 28 M | Cetirizine | Seasonal Allergic Rhinitis |
 
-#### Patient Flow
-1. Go to `http://localhost:5173/patient`
-2. Login with ABHA ID: `ABHA001`
-3. Enter medicine: `Aspirin`
-4. Click "Check Safety"
-5. **Expected**: Red warning (Aspirin + Warfarin = bleeding risk)
+### Scenarios
 
-#### Doctor Flow
-1. Go to `http://localhost:5173/doctor`
-2. Load patient: `ABHA002`
-3. Enter medicine: `Ibuprofen`
-4. Click "Analyze Prescription"
-5. **Expected**: Clinical explanation with override option
-
-#### Admin Flow
-1. Go to `http://localhost:5173/admin`
-2. **Expected**: Dashboard with statistics and override logs
+| Role | Steps | Expected |
+|---|---|---|
+| 🧑 Patient | `/patient` → login `ABHA001` → check **Aspirin** | 🔴 Bleeding-risk warning (Aspirin + Warfarin) |
+| 🧑 Patient | `/patient` → login `ABHA002` → check **Paracetamol** | 🟢 Safe |
+| 🩺 Doctor | `/doctor` → load `ABHA001` → analyze **Aspirin** | Critical risk with full XAI explanation and an override option |
+| 🛡️ Admin | `/admin` | Live stats and the override audit log |
 
 ---
 
-## 🏗️ Project Structure
+## 📡 API Reference
+
+### Main API (port 5000)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/patient/<abha_id>` | Full patient record (preprocessed) |
+| `GET` | `/api/patient/<abha_id>/summary` | AI health summary |
+| `GET` | `/api/patient/<abha_id>/test-recommendations` | Recommended lab tests |
+| `GET` | `/api/patient/<abha_id>/treatment-suggestions?diagnosis=<name>` | Evidence-graded treatments |
+| `POST` | `/api/patient/<abha_id>/upload-lab` | Upload and analyze a lab report |
+| `POST` | `/api/check-safety` | Drug safety check `{abha_id, medicine}` |
+| `POST` | `/api/xai/explain` | Explainable risk analysis `{abha_id, medicine}` |
+| `POST` | `/api/chat` | Context-aware assistant `{abha_id, query, history}` |
+| `POST` | `/api/admin/override` | Log a doctor override |
+| `GET` | `/api/admin/stats` | Dashboard statistics and recent overrides |
+| `GET` | `/api/stats` | Raw usage counters |
+
+### Mock ABDM server (port 8080)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/fhir/Patient?identifier=<id>` | Demographics |
+| `GET` | `/fhir/MedicationRequest?patient=<id>` | Medications |
+| `GET` | `/fhir/Condition?patient=<id>` | Diagnoses |
+| `GET` | `/fhir/DiagnosticReport?patient=<id>` | Lab reports |
+| `GET` | `/fhir/Procedure?patient=<id>` | Procedures |
+| `GET` | `/fhir/Encounter?patient=<id>` | Visits |
+
+<details>
+<summary><b>Example: safety check with curl</b></summary>
+
+```bash
+curl -X POST http://localhost:5000/api/check-safety \
+  -H "Content-Type: application/json" \
+  -d '{"abha_id": "ABHA001", "medicine": "Aspirin"}'
+```
+
+```json
+{
+  "status": "Risky",
+  "risk_level": "Critical",
+  "recommendation": "Avoid combination if possible. If necessary, use lowest effective aspirin dose and monitor INR weekly.",
+  "source": "FDA Drug Interaction Database - Anticoagulant Guidelines 2025"
+}
+```
+</details>
+
+---
+
+## 📂 Project Structure
 
 ```
-Project/
+Prism-care-main/
 ├── backend/
-│   ├── mock_abdm_server.py    # Government health records simulator
-│   ├── ai_engine.py            # Drug interaction AI (ChromaDB + RAG)
-│   ├── app.py                  # Main Flask API
-│   └── requirements.txt        # Python dependencies
-│
+│   ├── app_enhanced.py               # Main Flask API (port 5000)
+│   ├── mock_abdm_server_enhanced.py  # FHIR mock health-records server (port 8080)
+│   ├── ai_engine_enhanced.py         # 50 interaction rules + ChromaDB retrieval
+│   ├── xai_rag_engine.py             # Explainable AI (RAG + optional Gemini)
+│   ├── ai_summarizer.py              # Patient health summaries
+│   ├── lab_analyzer.py               # Lab report analysis
+│   ├── data_preprocessor.py          # Cleans and deduplicates FHIR data
+│   ├── requirements.txt
+│   └── .env.example
 └── frontend/
-    ├── src/
-    │   ├── components/         # Reusable UI components
-    │   │   ├── Navbar.jsx
-    │   │   ├── Footer.jsx
-    │   │   ├── Button.jsx
-    │   │   ├── Card.jsx
-    │   │   ├── Modal.jsx
-    │   │   └── LoadingSpinner.jsx
-    │   │
-    │   ├── pages/              # Main application pages
-    │   │   ├── LandingPage.jsx
-    │   │   ├── PatientDashboard.jsx
-    │   │   ├── DoctorDashboard.jsx
-    │   │   ├── AdminDashboard.jsx
-    │   │   ├── AboutPage.jsx
-    │   │   ├── FeaturesPage.jsx
-    │   │   └── ContactPage.jsx
-    │   │
-    │   ├── App.jsx              # Main router
-    │   ├── main.jsx             # Entry point
-    │   └── index.css            # Tailwind styles
-    │
-    ├── package.json
-    ├── vite.config.js
-    └── tailwind.config.js
+    └── src/
+        ├── pages/                    # Landing, Patient, Doctor, Admin, About, Features, Contact
+        └── components/               # XAIExplanationPanel, RiskGauge, FormattedText, Card, Button…
 ```
 
 ---
 
-## 🎯 Key Features
+## 🛠️ Tech Stack
 
-### For Patients
-- ✅ Simple, jargon-free explanations
-- ✅ Traffic light visual system (Green = Safe, Red = Risky)
-- ✅ Medication history tracking
-- ✅ Instant safety checks
-
-### For Doctors
-- ✅ Clinical-grade analysis with mechanisms
-- ✅ Evidence-based recommendations
-- ✅ Override capability with audit trail
-- ✅ Source citations (FDA, AHA guidelines)
-
-### For Administrators
-- ✅ Real-time analytics dashboard
-- ✅ Override monitoring
-- ✅ System health metrics
-- ✅ Export capabilities
+| Layer | Technologies |
+|---|---|
+| **Frontend** | React 18, Vite, Tailwind CSS, Framer Motion, Recharts, React Router, Axios, Lucide icons |
+| **Backend** | Python, Flask, Flask-CORS |
+| **AI / ML** | ChromaDB (vector search), Google Gemini (optional), OpenRouter (optional), RAG-based XAI |
+| **Health data** | FHIR-style resources modelled on ABDM |
 
 ---
 
-## 🧠 Technology Stack
+## 🚧 Roadmap
 
-**Backend**:
-- Python 3.x
-- Flask (REST API)
-- ChromaDB (Vector Database)
-- LangChain (RAG Framework)
-
-**Frontend**:
-- React 18
-- Vite (Build Tool)
-- Tailwind CSS (Styling)
-- Framer Motion (Animations)
-- Recharts (Analytics)
-- React Router (Navigation)
-- Axios (HTTP Client)
-
----
-
-## 📊 API Endpoints
-
-### Backend API (Port 5000)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/login` | Patient/doctor authentication |
-| POST | `/api/validate` | Drug interaction analysis |
-| POST | `/api/admin/override` | Log doctor override |
-| GET | `/api/admin/stats` | System statistics |
-| GET | `/api/admin/overrides` | Override logs (paginated) |
-
-### Mock ABDM Server (Port 8080)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/fhir/Patient?identifier={id}` | Patient demographics |
-| GET | `/fhir/MedicationRequest?patient={id}` | Medication history |
-
----
-
-## 🔬 Drug Interaction Rules
-
-The AI engine includes 5 pre-loaded interaction rules:
-
-1. **Aspirin + Warfarin** → High bleeding risk
-2. **Ibuprofen + Aspirin** → GI issues, reduced cardioprotection
-3. **Metformin + Alcohol** → Lactic acidosis risk
-4. **Lisinopril + Potassium** → Hyperkalemia
-5. **Atorvastatin + Grapefruit** → Increased statin levels
-
----
-
-## 🎨 Design System
-
-**Colors**:
-- Primary (Teal): `#14B8A6` - Trust, healthcare
-- Secondary (Indigo): `#6366F1` - Technology, AI
-- Accent (Emerald): `#10B981` - Safety, success
-- Warning (Amber): `#F59E0B` - Caution
-- Danger (Rose): `#F43F5E` - Risk
-
-**Typography**: Inter (Google Fonts)
-
-**Spacing**: 8px grid system
-
----
-
-## 🚧 Future Enhancements
-
-See [frontend_enhancements.md](../brain/a2b3d02b-29cd-43c4-85cb-99307a3f2a62/frontend_enhancements.md) for detailed feature suggestions:
-
-- Dark mode
-- Voice input
-- QR code scanner
-- Real drug database integration
-- PWA (offline capability)
-- Multi-language support
-- Predictive analytics
+- [ ] Real drug database integration
+- [ ] Authentication for doctors and admins
+- [ ] Dark mode
+- [ ] Multi-language explanations (Hindi and regional languages)
+- [ ] Voice input and QR-code ABHA scan
+- [ ] PWA / offline support
 
 ---
 
@@ -234,18 +327,18 @@ Permission to use, modify, or redistribute this code may only be granted explici
 
 See the [LICENSE](./LICENSE) file for full details.
 
-## 👥 Contact
-
-For questions or feedback, visit the Contact page in the application.
-
 ---
 
 ## 🙏 Acknowledgments
 
-- ABDM (Ayushman Bharat Digital Mission) for healthcare standards
-- Medical guidelines from FDA, AHA, and Endocrine Society
+- ABDM (Ayushman Bharat Digital Mission) for healthcare data standards
+- Medical guidelines from FDA, AHA/ACC and the Endocrine Society
 - Open-source libraries: React, Flask, ChromaDB, Tailwind CSS
 
----
+> ⚠️ **Disclaimer:** PrismCare is a research and educational project. It is not a medical device and must not replace professional medical advice.
+
+<div align="center">
 
 **Made with ❤️ for healthcare**
+
+</div>

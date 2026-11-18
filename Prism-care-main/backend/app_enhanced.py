@@ -36,7 +36,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Configuration
-ABDM_SERVER_URL = "http://localhost:8080"
+ABDM_SERVER_URL = os.getenv("ABDM_SERVER_URL", "http://127.0.0.1:8080")
 OVERRIDES_FILE = "overrides.json"
 STATS_FILE = "stats.json"
 UPLOAD_FOLDER = 'temp_uploads'
@@ -44,10 +44,45 @@ UPLOAD_FOLDER = 'temp_uploads'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
+SERVER_START_TIME = datetime.now()
+
+
+def _load_stats():
+    """Load usage stats, migrating any older key names to the current schema."""
+    stats = {}
+    try:
+        with open(STATS_FILE, 'r') as f:
+            stats = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return {
+        "total_validations": stats.get("total_validations", stats.get("total_checks", 0)),
+        "safe_validations": stats.get("safe_validations", stats.get("safe_count", 0)),
+        "risky_detections": stats.get("risky_detections", stats.get("risky_count", 0)),
+        "total_overrides": stats.get("total_overrides", 0),
+    }
+
+
+def _save_stats(stats):
+    with open(STATS_FILE, 'w') as f:
+        json.dump(stats, f, indent=2)
+
+
+def _load_overrides():
+    """Load override log as a list (older versions stored a dict)."""
+    try:
+        with open(OVERRIDES_FILE, 'r') as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+    if isinstance(data, dict):
+        return [{"drug": k, **v} for k, v in data.items()]
+    return data
+
+
 # Initialize stats file
 if not os.path.exists(STATS_FILE):
-    with open(STATS_FILE, 'w') as f:
-        json.dump({"total_checks": 0, "safe_count": 0, "risky_count": 0}, f)
+    _save_stats(_load_stats())
 
 
 @app.route('/api/health', methods=['GET'])
@@ -238,17 +273,13 @@ def check_drug_safety():
         
         # Update statistics
         try:
-            with open(STATS_FILE, 'r') as f:
-                stats = json.load(f)
-            
-            stats["total_checks"] += 1
+            stats = _load_stats()
+            stats["total_validations"] += 1
             if analysis_result["status"] == "Safe":
-                stats["safe_count"] += 1
+                stats["safe_validations"] += 1
             else:
-                stats["risky_count"] += 1
-            
-            with open(STATS_FILE, 'w') as f:
-                json.dump(stats, f)
+                stats["risky_detections"] += 1
+            _save_stats(stats)
         except Exception as e:
             print(f"Error updating stats: {e}")
         
@@ -352,11 +383,37 @@ def get_patient_treatment_suggestions(abha_id):
 def get_stats():
     """Get usage statistics"""
     try:
-        with open(STATS_FILE, 'r') as f:
-            stats = json.load(f)
-        return jsonify(stats), 200
+        return jsonify(_load_stats()), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/admin/stats', methods=['GET'])
+def get_admin_stats():
+    """Statistics and recent overrides for the admin dashboard"""
+    try:
+        stats = _load_stats()
+        overrides = _load_overrides()
+
+        total = stats["total_validations"]
+        risky = stats["risky_detections"]
+        risk_percentage = (risky / total * 100) if total > 0 else 0
+        override_rate = (stats["total_overrides"] / risky * 100) if risky > 0 else 0
+
+        uptime = datetime.now() - SERVER_START_TIME
+        hours, remainder = divmod(int(uptime.total_seconds()), 3600)
+        minutes = remainder // 60
+
+        return jsonify({
+            **stats,
+            "risk_percentage": round(risk_percentage, 1),
+            "override_rate": round(override_rate, 1),
+            "recent_overrides": list(reversed(overrides[-10:])),
+            "system_uptime": f"{hours}h {minutes}m",
+            "last_updated": datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch stats: {str(e)}"}), 500
 
 
 @app.route('/api/patient/<abha_id>/upload-lab', methods=['POST'])
@@ -591,32 +648,33 @@ def chat_endpoint():
 
 @app.route('/api/admin/override', methods=['POST'])
 def set_override():
-    """Admin endpoint to override AI decisions"""
+    """Log a doctor's decision to override an AI safety warning"""
     try:
-        data = request.json
-        interaction = data.get('interaction')
-        override_decision = data.get('decision')
-        
-        if not interaction or not override_decision:
-            return jsonify({"error": "Missing required fields"}), 400
-        
-        # Load existing overrides
-        try:
-            with open(OVERRIDES_FILE, 'r') as f:
-                overrides = json.load(f)
-        except FileNotFoundError:
-            overrides = {}
-        
-        # Add new override
-        overrides[interaction] = {
-            "decision": override_decision,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        # Save
+        data = request.json or {}
+        drug = data.get('drug')
+        reason = data.get('reason')
+
+        if not drug or not reason:
+            return jsonify({"error": "Missing required fields: drug, reason"}), 400
+
+        overrides = _load_overrides()
+        overrides.append({
+            "id": f"OVR{len(overrides) + 1:04d}",
+            "timestamp": datetime.now().isoformat(),
+            "doctor_id": data.get('doctor_id', ''),
+            "doctor_name": data.get('doctor_name', 'Unknown'),
+            "patient_id": data.get('patient_id', ''),
+            "drug": drug,
+            "risk_level": data.get('risk_level', 'Unknown'),
+            "reason": reason,
+        })
         with open(OVERRIDES_FILE, 'w') as f:
             json.dump(overrides, f, indent=2)
-        
+
+        stats = _load_stats()
+        stats["total_overrides"] += 1
+        _save_stats(stats)
+
         return jsonify({"message": "Override saved successfully"}), 200
         
     except Exception as e:
@@ -639,6 +697,7 @@ if __name__ == '__main__':
     print("  POST /api/patient/<abha_id>/upload-lab")
     print("  GET  /api/stats")
     print("  POST /api/admin/override")
+    print("  GET  /api/admin/stats")
     print("\n🚀 New Features:")
     print("  ✅ AI-powered medical summarization")
     print("  ✅ 50+ drug interaction rules")
